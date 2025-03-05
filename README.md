@@ -1,10 +1,3 @@
-# toolfblitev1
-toolfblitev1
-
-
-
-
-
 import re
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
@@ -161,13 +154,20 @@ class FBLinkOpenerPro:
         self.console.config(state='disabled')
 
     def extract_post_info(self, input_str):
-        # Cập nhật pattern cho bài viết trong nhóm: cho phép group id là chữ, số, dấu gạch dưới hoặc dấu chấm
-        post_pattern = r"(?:https?:\/\/)?(?:www\.|m\.)?facebook\.com\/groups\/([\w\.]+)\/permalink\/(\d+)"
-        post_match = re.search(post_pattern, input_str)
-        if post_match:
-            return post_match.groups()  # (group_id, post_id)
+        # 1. Kiểm tra dạng bài viết trong nhóm (groups/permalink)
+        group_pattern = r"(?:https?:\/\/)?(?:www\.|m\.)?facebook\.com\/groups\/([\w\.]+)\/permalink\/(\d+)(?:\/)?(?:\?.*)?"
+        group_match = re.search(group_pattern, input_str)
+        if group_match:
+            return group_match.groups()  # (group_id, post_id)
         
-        # Pattern cho ID bài viết dạng: groupid_postid (groupid có thể bao gồm chữ, số, dấu gạch dưới hoặc dấu chấm)
+        # 2. Kiểm tra dạng share (share/p)
+        share_pattern = r"(?:https?:\/\/)?(?:www\.|m\.)?facebook\.com\/share\/p\/(\w+)(?:\/)?(?:\?.*)?"
+        share_match = re.search(share_pattern, input_str)
+        if share_match:
+            post_id = share_match.group(1)
+            return (None, post_id)  # group_id = None đánh dấu đây là dạng share
+        
+        # 3. Kiểm tra dạng trực tiếp: groupid_postid (groupid có thể bao gồm chữ, số, dấu gạch dưới hoặc dấu chấm)
         if re.match(r"^[\w\.]+_\d+$", input_str):
             return input_str.split('_')
         
@@ -237,15 +237,22 @@ class FBLinkOpenerPro:
                     return False
                 
                 group_id, post_id = self.extract_post_info(post_link)
-                if not group_id or not post_id:
+                if not post_id:
                     self.log_message("❌ Link bài viết không hợp lệ")
                     return False
                 
-                web_url = f"https://m.facebook.com/groups/{group_id}/posts/{post_id}/"
+                # Nếu group_id khác None => xử lý bài viết trong nhóm
+                if group_id:
+                    web_url = f"https://m.facebook.com/groups/{group_id}/posts/{post_id}/"
+                    self.log_message(f"📄 Đang mở bài viết {post_id} trong nhóm {group_id}")
+                else:
+                    # Xử lý dạng share link
+                    web_url = f"https://m.facebook.com/share/p/{post_id}/"
+                    self.log_message(f"📄 Đang mở bài viết share: {post_id}")
+                
                 result = device.shell(f'am start -a android.intent.action.VIEW -d "{web_url}"')
                 if "Error" in result:
                     raise Exception(result.split("Error:")[-1])
-                self.log_message(f"📄 Đang mở bài viết {post_id} trong nhóm {group_id}")
                 return True
 
         except Exception as e:
